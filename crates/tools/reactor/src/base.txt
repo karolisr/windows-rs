@@ -6,7 +6,7 @@ Microsoft::UI::Dispatching::DispatcherQueueTimer
 Microsoft::UI::Dispatching::IDispatcherQueue::{CreateTimer, TryEnqueueWithPriority}
 Microsoft::UI::Dispatching::IDispatcherQueueTimer::{put_Interval, put_IsRepeating, Tick, Start, Stop}
 Microsoft::UI::Input::IPointerPoint::{get_Position, get_Properties}
-Microsoft::UI::Input::IPointerPointProperties::{get_IsLeftButtonPressed, get_IsRightButtonPressed, get_IsMiddleButtonPressed}
+Microsoft::UI::Input::IPointerPointProperties::{get_IsLeftButtonPressed, get_IsRightButtonPressed, get_IsMiddleButtonPressed, get_MouseWheelDelta}
 Microsoft::UI::Input::PointerPoint
 Microsoft::UI::Input::PointerPointProperties
 Microsoft::UI::Text::ITextDocument::{SetText, GetText}
@@ -237,7 +237,7 @@ Microsoft::UI::Xaml::IFrameworkElement::{put_VerticalAlignment, put_HorizontalAl
 Microsoft::UI::Xaml::IResourceDictionary::get_MergedDictionaries
 Microsoft::UI::Xaml::ISizeChangedEventArgs::get_NewSize
 Microsoft::UI::Xaml::FocusState
-Microsoft::UI::Xaml::IUIElement::{put_AllowDrop, put_Opacity, put_XamlRoot, get_XamlRoot, get_KeyboardAccelerators, put_KeyboardAcceleratorPlacementMode, Focus, CapturePointer, ReleasePointerCapture, ReleasePointerCaptures, PointerPressed, PointerReleased, PointerMoved, PointerEntered, PointerExited, PointerCaptureLost, PointerCanceled, Tapped, RightTapped, DragEnter, DragLeave, DragOver, Drop}
+Microsoft::UI::Xaml::IUIElement::{put_AllowDrop, put_Opacity, put_XamlRoot, get_XamlRoot, get_KeyboardAccelerators, put_KeyboardAcceleratorPlacementMode, Focus, CapturePointer, ReleasePointerCapture, ReleasePointerCaptures, PointerPressed, PointerReleased, PointerMoved, PointerEntered, PointerExited, PointerWheelChanged, PointerCaptureLost, PointerCanceled, Tapped, RightTapped, DragEnter, DragLeave, DragOver, Drop}
 Microsoft::UI::Xaml::IWindow2::{get_AppWindow, put_SystemBackdrop}
 Microsoft::UI::Xaml::IWindow::{put_Title, put_Content, put_ExtendsContentIntoTitleBar, SetTitleBar, Activate, Close, Closed}
 Microsoft::UI::Xaml::IWindowEventArgs::{}
