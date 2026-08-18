@@ -296,6 +296,7 @@ pub enum Event {
     CloseRequested,
     CommandBarFlyoutClick,
     ColorChanged,
+    ContextMenuItemClicked,
     Expanding,
     ItemClicked,
     ItemInvoked,
@@ -525,6 +526,9 @@ pub trait Backend {
     }
 
     fn set_tooltip(&mut self, _id: ControlId, _tooltip: Option<&Tooltip>) {}
+
+    /// Attach (or clear) a `MenuFlyout` context menu on `id`.
+    fn set_context_flyout(&mut self, _id: ControlId, _flyout: Option<&ContextFlyout>) {}
 
     fn set_pointer_handlers(&mut self, _id: ControlId, _handlers: Option<&PointerHandlers>) {}
 

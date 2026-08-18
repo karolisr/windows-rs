@@ -219,6 +219,11 @@ pub(super) fn build_menu_flyout_item_base(
             }
             item.cast()
         }
+        MenuItemDef::EditCommand(command) => {
+            let item = bindings::MenuFlyoutItem::new()?;
+            item.SetText(command.label())?;
+            item.cast()
+        }
         MenuItemDef::Separator => {
             let sep = bindings::MenuFlyoutSeparator::new()?;
             sep.cast()

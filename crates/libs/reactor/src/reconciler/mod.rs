@@ -969,6 +969,7 @@ impl<B: Backend + 'static> Reconciler<B> {
         self.apply_accessibility_for(id, mods);
         self.apply_keyboard_accelerators_for(id, mods);
         self.apply_tooltip_for(id, mods);
+        self.apply_context_flyout_for(id, mods);
         self.apply_pointer_handlers_for(id, mods);
         self.apply_drag_handlers_for(id, mods);
 
@@ -990,6 +991,13 @@ impl<B: Backend + 'static> Reconciler<B> {
             return;
         };
         self.backend.set_tooltip(id, Some(tt));
+    }
+
+    fn apply_context_flyout_for(&mut self, id: ControlId, mods: &Modifiers) {
+        let Some(cf) = mods.context_flyout.as_deref() else {
+            return;
+        };
+        self.backend.set_context_flyout(id, Some(cf));
     }
 
     fn apply_pointer_handlers_for(&mut self, id: ControlId, mods: &Modifiers) {
@@ -1216,6 +1224,13 @@ impl<B: Backend + 'static> Reconciler<B> {
         let new_tt = new.tooltip.as_deref();
         if old_tt != new_tt {
             self.backend.set_tooltip(id, new_tt);
+        }
+
+        // ContextFlyout survives re-renders, so clear Some->None explicitly.
+        let old_cf = old.context_flyout.as_deref();
+        let new_cf = new.context_flyout.as_deref();
+        if old_cf != new_cf {
+            self.backend.set_context_flyout(id, new_cf);
         }
 
         // Clear Some->None so event tokens are dropped.

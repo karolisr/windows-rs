@@ -591,6 +591,7 @@ pub struct Modifiers {
     pub accessibility: Option<Box<AccessibilityModifiers>>,
     pub keyboard_accelerators: Vec<KeyboardAccelerator>,
     pub tooltip: Option<Box<Tooltip>>,
+    pub context_flyout: Option<Box<ContextFlyout>>,
     pub pointer_handlers: Option<Box<PointerHandlers>>,
     pub allow_drop: Option<bool>,
     pub drag_handlers: Option<Box<DragHandlers>>,
@@ -622,6 +623,7 @@ impl Modifiers {
             && self.accessibility.as_deref().is_none_or(|a| a.is_empty())
             && self.keyboard_accelerators.is_empty()
             && self.tooltip.is_none()
+            && self.context_flyout.is_none()
             && self
                 .pointer_handlers
                 .as_deref()
@@ -840,4 +842,21 @@ pub enum TooltipPlacement {
     Left,
     Right,
     Mouse,
+}
+
+/// Right-click context menu attached to any element via WinUI
+/// `UIElement.ContextFlyout`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContextFlyout {
+    pub items: Vec<MenuItemDef>,
+    pub on_item_clicked: Option<Callback<String>>,
+}
+
+impl ContextFlyout {
+    pub fn new(items: Vec<MenuItemDef>) -> Self {
+        Self {
+            items,
+            on_item_clicked: None,
+        }
+    }
 }

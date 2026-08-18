@@ -200,6 +200,8 @@ macro_rules! define_element {
 
             impl capability::Tooltip for $variant {}
 
+            impl capability::ContextFlyout for $variant {}
+
             impl capability::GridChild for $variant {}
 
             impl capability::CanvasChild for $variant {}
@@ -228,6 +230,17 @@ macro_rules! define_element {
                     Element::Provider(_) => "Provider",
                     Element::TemplatedList(_) => "TemplatedList",
                     Element::Empty => "Empty",
+                }
+            }
+            /// Mutable access to this element's [`Modifiers`], for callers
+            /// that only hold a type-erased `Element` (see [`ElementExt`]).
+            /// `None` for `Component`/`Provider`/`Empty`, which carry no
+            /// `Modifiers` to attach to.
+            pub fn modifiers_mut(&mut self) -> Option<&mut Modifiers> {
+                match self {
+                    $( Element::$variant(v) => Some(&mut v.modifiers), )*
+                    Element::TemplatedList(tl) => Some(&mut tl.modifiers),
+                    Element::Component(_) | Element::Provider(_) | Element::Empty => None,
                 }
             }
         }
@@ -513,6 +526,12 @@ pub(crate) mod capability {
 
     pub trait Tooltip: Native {
         fn tooltip_modifiers_mut(&mut self) -> &mut Modifiers {
+            self.native_modifiers_mut()
+        }
+    }
+
+    pub trait ContextFlyout: Native {
+        fn context_flyout_modifiers_mut(&mut self) -> &mut Modifiers {
             self.native_modifiers_mut()
         }
     }
@@ -994,6 +1013,90 @@ pub trait TooltipExt: capability::Tooltip + Sized {
 }
 
 impl<T: capability::Tooltip> TooltipExt for T {}
+
+/// Right-click context-menu modifiers for concrete native widgets.
+///
+/// ```compile_fail
+/// use windows_reactor::{ContextFlyoutExt, Element, button, menu_item};
+///
+/// let element: Element = button("Save").into();
+/// let _ = element.context_menu(vec![menu_item("Copy")]);
+/// ```
+pub trait ContextFlyoutExt: capability::ContextFlyout + Sized {
+    /// Attach a right-click context menu (`MenuFlyout`) to this element.
+    /// Combine with [`MenuItemDef::EditCommand`] items to merge native
+    /// Undo/Redo/Cut/Copy/Paste/Select All alongside app-defined extras on a
+    /// text-editing control.
+    fn context_menu(mut self, items: Vec<MenuItemDef>) -> Self {
+        let modifiers = capability::ContextFlyout::context_flyout_modifiers_mut(&mut self);
+        let flyout = modifiers
+            .context_flyout
+            .get_or_insert_with(|| Box::new(ContextFlyout::new(vec![])));
+        flyout.items = items;
+        self
+    }
+
+    /// Handler for [`Self::context_menu`] item activation (by item label).
+    /// Not invoked for [`MenuItemDef::EditCommand`] items, which dispatch to
+    /// the native text-editing action instead.
+    fn on_context_menu_item_clicked<F: Fn(String) + 'static>(mut self, f: F) -> Self {
+        let modifiers = capability::ContextFlyout::context_flyout_modifiers_mut(&mut self);
+        let flyout = modifiers
+            .context_flyout
+            .get_or_insert_with(|| Box::new(ContextFlyout::new(vec![])));
+        flyout.on_item_clicked = Some(Callback::new(f));
+        self
+    }
+}
+
+impl<T: capability::ContextFlyout> ContextFlyoutExt for T {}
+
+/// Tooltip and context-menu modifiers for a type-erased [`Element`].
+///
+/// [`TooltipExt`] and [`ContextFlyoutExt`] require a concrete widget type
+/// (via the `capability` marker traits) so modifiers can only be attached
+/// before the widget is converted `.into()` an `Element`. Callers that only
+/// hold an already-erased `Element` — for example a cross-platform wrapper
+/// crate applying chrome after widget construction — use this instead.
+/// Silently no-ops on `Component`/`Provider`/`Empty` variants, which have no
+/// [`Modifiers`] to attach to.
+pub trait ElementExt: Sized {
+    /// See [`TooltipExt::tooltip`].
+    fn tooltip(self, text: impl Into<String>) -> Self;
+    /// See [`ContextFlyoutExt::context_menu`].
+    fn context_menu(self, items: Vec<MenuItemDef>) -> Self;
+    /// See [`ContextFlyoutExt::on_context_menu_item_clicked`].
+    fn on_context_menu_item_clicked<F: Fn(String) + 'static>(self, f: F) -> Self;
+}
+
+impl ElementExt for Element {
+    fn tooltip(mut self, text: impl Into<String>) -> Self {
+        if let Some(m) = self.modifiers_mut() {
+            m.tooltip = Some(Box::new(Tooltip::text(text)));
+        }
+        self
+    }
+
+    fn context_menu(mut self, items: Vec<MenuItemDef>) -> Self {
+        if let Some(m) = self.modifiers_mut() {
+            let flyout = m
+                .context_flyout
+                .get_or_insert_with(|| Box::new(ContextFlyout::new(vec![])));
+            flyout.items = items;
+        }
+        self
+    }
+
+    fn on_context_menu_item_clicked<F: Fn(String) + 'static>(mut self, f: F) -> Self {
+        if let Some(m) = self.modifiers_mut() {
+            let flyout = m
+                .context_flyout
+                .get_or_insert_with(|| Box::new(ContextFlyout::new(vec![])));
+            flyout.on_item_clicked = Some(Callback::new(f));
+        }
+        self
+    }
+}
 
 /// Framework layout modifiers for concrete native widget builders.
 ///

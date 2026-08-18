@@ -1,5 +1,33 @@
 use super::*;
 
+/// Built-in text-editing action, matching WinUI's native
+/// `TextCommandBarFlyout` command set. Used by [`MenuItemDef::EditCommand`]
+/// so a right-click context menu can merge native Undo/Redo/Cut/Copy/Paste/
+/// Select All alongside app-defined extra items.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum TextEditCommand {
+    Undo,
+    Redo,
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+}
+
+impl TextEditCommand {
+    /// Visible label for the flyout item (matches the WinUI default edit menu).
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Undo => "Undo",
+            Self::Redo => "Redo",
+            Self::Cut => "Cut",
+            Self::Copy => "Copy",
+            Self::Paste => "Paste",
+            Self::SelectAll => "Select All",
+        }
+    }
+}
+
 /// Definition of a single item within a menu (used by both [`MenuBar`]
 /// and the menu flyout modifier on buttons).
 #[derive(Clone, Debug, PartialEq)]
@@ -13,6 +41,10 @@ pub enum MenuItemDef {
         /// Optional icon shown to the left of the text.
         icon: Option<Icon>,
     },
+    /// Native text-editing command on the flyout host (WinUI only). Only
+    /// meaningful inside a [`ContextFlyout`](crate::ContextFlyout) attached to
+    /// a text-editing control; ignored elsewhere.
+    EditCommand(TextEditCommand),
     /// A visual separator line.
     Separator,
     /// A submenu containing nested items.
@@ -47,6 +79,11 @@ pub fn menu_item_icon(text: impl Into<String>, icon: impl Into<Icon>) -> MenuIte
         is_enabled: true,
         icon: Some(icon.into()),
     }
+}
+
+/// Builder for a [`MenuItemDef::EditCommand`].
+pub fn menu_edit_command(command: TextEditCommand) -> MenuItemDef {
+    MenuItemDef::EditCommand(command)
 }
 
 /// Builder for a [`MenuItemDef::Separator`].
