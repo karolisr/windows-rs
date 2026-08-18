@@ -26,6 +26,7 @@ pub struct TextBox {
     pub modifiers: Modifiers,
     pub value: String,
     pub on_text_changed: Option<Callback<String>>,
+    pub on_focus_changed: Option<Callback<bool>>,
     pub placeholder_text: String,
     pub header: Option<String>,
     pub is_enabled: bool,
@@ -61,6 +62,12 @@ impl Widget for TextBox {
             Prop::Value,
             PropValue::Str(self.value.clone()),
         ));
+        out.push(Binding::Event(
+            Event::FocusChanged,
+            self.on_focus_changed
+                .as_ref()
+                .map(|cb| EventHandler::Bool(cb.clone())),
+        ));
         if let Some(BrushBinding::Direct(br)) = &self.border_brush {
             out.push(Binding::Prop(Prop::BorderBrush, PropValue::Color(*br)));
         }
@@ -77,6 +84,14 @@ impl Widget for TextBox {
 impl TextBox {
     pub fn on_text_changed(mut self, f: impl IntoCallback<String>) -> Self {
         self.on_text_changed = Some(f.into_callback());
+        self
+    }
+
+    /// Reports native focus gained (`true`) / lost (`false`) via WinUI's
+    /// `UIElement.GotFocus`/`LostFocus`, since `TextBox` has no dedicated
+    /// focus-changed event of its own.
+    pub fn on_focus_changed(mut self, f: impl IntoCallback<bool>) -> Self {
+        self.on_focus_changed = Some(f.into_callback());
         self
     }
 

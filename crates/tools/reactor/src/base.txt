@@ -240,7 +240,7 @@ Microsoft::UI::Xaml::IFrameworkElement::{put_VerticalAlignment, put_HorizontalAl
 Microsoft::UI::Xaml::IResourceDictionary::get_MergedDictionaries
 Microsoft::UI::Xaml::ISizeChangedEventArgs::get_NewSize
 Microsoft::UI::Xaml::FocusState
-Microsoft::UI::Xaml::IUIElement::{put_AllowDrop, put_Opacity, put_XamlRoot, get_XamlRoot, get_KeyboardAccelerators, put_KeyboardAcceleratorPlacementMode, Focus, CapturePointer, ReleasePointerCapture, ReleasePointerCaptures, PointerPressed, PointerReleased, PointerMoved, PointerEntered, PointerExited, PointerWheelChanged, PointerCaptureLost, PointerCanceled, Tapped, RightTapped, DragEnter, DragLeave, DragOver, Drop, put_Visibility, put_ContextFlyout, ContextRequested, ContextCanceled}
+Microsoft::UI::Xaml::IUIElement::{put_AllowDrop, put_Opacity, put_XamlRoot, get_XamlRoot, get_KeyboardAccelerators, put_KeyboardAcceleratorPlacementMode, Focus, CapturePointer, ReleasePointerCapture, ReleasePointerCaptures, PointerPressed, PointerReleased, PointerMoved, PointerEntered, PointerExited, PointerWheelChanged, PointerCaptureLost, PointerCanceled, Tapped, RightTapped, DragEnter, DragLeave, DragOver, Drop, put_Visibility, put_ContextFlyout, ContextRequested, ContextCanceled, GotFocus, LostFocus}
 Microsoft::UI::Xaml::Visibility
 Microsoft::UI::Xaml::Media::VisualTreeHelper::{GetChild, GetChildrenCount}
 Microsoft::UI::Xaml::Input::IContextRequestedEventArgs::{put_Handled, TryGetPosition}

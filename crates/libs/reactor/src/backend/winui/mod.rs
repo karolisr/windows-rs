@@ -3151,6 +3151,24 @@ impl Backend for WinUIBackend {
                     .unwrap(),
                 );
             }
+            // RNG PATCH: TextBox has no dedicated focus-changed event; report
+            // native GotFocus/LostFocus on the underlying UIElement instead.
+            (Event::FocusChanged, Handle::TextBox(tb)) => {
+                let Ok(iue) = tb.cast::<bindings::IUIElement>() else {
+                    return;
+                };
+                let got_handler = handler.clone();
+                if let Ok(rev) = iue.GotFocus(move |_sender, _args| {
+                    got_handler.invoke_bool(true);
+                }) {
+                    revokers.push(rev);
+                }
+                if let Ok(rev) = iue.LostFocus(move |_sender, _args| {
+                    handler.invoke_bool(false);
+                }) {
+                    revokers.push(rev);
+                }
+            }
             // RNG PATCH: chevron-driven expand/collapse, needed for
             // TreeView::on_expand/on_collapse (rust-native-gui uses these for
             // lazy child-node loading, not a plain ItemInvoked label click).

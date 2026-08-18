@@ -299,6 +299,7 @@ pub enum Event {
     ColorChanged,
     ContextMenuItemClicked,
     Expanding,
+    FocusChanged,
     ItemClicked,
     ItemInvoked,
     NavigationDisplayModeChanged,
