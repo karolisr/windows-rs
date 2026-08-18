@@ -830,10 +830,25 @@ pub fn mount_combo_box(h: Harness) -> FixtureFuture {
             ComboBox::new(["Red", "Green", "Blue"])
                 .header("Color")
                 .placeholder_text("pick a color")
+                // Non-zero on first mount: regression guard for a historical
+                // WinUI quirk where (re)populating `Items` after
+                // `SelectedIndex` resets the native selection to -1, so the
+                // binding order emitted by `ComboBox::bindings()` must apply
+                // `Items` before `SelectedIndex`.
+                .selected_index(2)
                 .into()
         }));
         h.render().await;
         assert_present!(h, "Reconciler_Mount_ComboBox", bindings::ComboBox);
+        let native_selected_index = h
+            .find_all::<bindings::ComboBox>(&|_| true)
+            .first()
+            .and_then(|c| c.cast::<bindings::ISelector>().ok())
+            .and_then(|s| s.SelectedIndex().ok());
+        h.check(
+            "Reconciler_Mount_ComboBox_SelectedIndexSurvivesItemsBinding",
+            native_selected_index == Some(2),
+        );
     })
 }
 
