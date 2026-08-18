@@ -101,7 +101,7 @@ Microsoft::UI::Xaml::Controls::IContainerContentChangingEventArgs::{get_ItemCont
 Microsoft::UI::Xaml::Controls::IMenuBar::get_Items
 Microsoft::UI::Xaml::Controls::IMenuBarItem::{get_Items, put_Title}
 Microsoft::UI::Xaml::Controls::IMenuFlyout::get_Items
-Microsoft::UI::Xaml::Controls::IMenuFlyoutItem::{put_Text, get_Text, Click}
+Microsoft::UI::Xaml::Controls::IMenuFlyoutItem::{put_Text, get_Text, put_Icon, Click}
 Microsoft::UI::Xaml::Controls::IMenuFlyoutSubItem::{get_Items, put_Text}
 Microsoft::UI::Xaml::Controls::INavigationView2::{put_IsBackButtonVisible, BackRequested}
 Microsoft::UI::Xaml::Controls::INavigationView::{get_IsPaneOpen, get_DisplayMode, get_MenuItems, put_SelectedItem, put_AutoSuggestBox, get_AutoSuggestBox, put_PaneFooter, SelectionChanged}

@@ -10672,6 +10672,18 @@ impl IMenuFlyoutItem {
             .ok()
         }
     }
+    pub(crate) fn SetIcon<P0>(&self, value: P0) -> windows_core::Result<()>
+    where
+        P0: windows_core::Param<IconElement>,
+    {
+        unsafe {
+            (windows_core::Interface::vtable(self).SetIcon)(
+                windows_core::Interface::as_raw(self),
+                value.param().abi(),
+            )
+            .ok()
+        }
+    }
     pub(crate) fn Click<F>(&self, handler: F) -> windows_core::Result<windows_core::EventRevoker>
     where
         F: Fn(windows_core::Ref<windows_core::IInspectable>, windows_core::Ref<RoutedEventArgs>)
@@ -10716,7 +10728,10 @@ pub struct IMenuFlyoutItem_Vtbl {
     CommandParameter: usize,
     SetCommandParameter: usize,
     Icon: usize,
-    SetIcon: usize,
+    pub SetIcon: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *mut core::ffi::c_void,
+    ) -> windows_core::HRESULT,
     KeyboardAcceleratorTextOverride: usize,
     SetKeyboardAcceleratorTextOverride: usize,
     TemplateSettings: usize,
