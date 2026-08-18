@@ -473,6 +473,12 @@ pub fn dispatch(handle: &Handle, prop: Prop, value: &PropValue) -> Result<bool> 
         (Prop::Text, PropValue::Str(v), Handle::TextBlock(h)) => {
             h.SetText(v.as_str())?;
         }
+        (Prop::TextAlignment, PropValue::I32(v), Handle::TextBlock(h)) => {
+            h.SetTextAlignment(TextAlignment(*v))?;
+        }
+        (Prop::TextAlignment, PropValue::I32(v), Handle::TextBox(h)) => {
+            h.SetTextAlignment(TextAlignment(*v))?;
+        }
         (Prop::TextWrapping, PropValue::I32(v), Handle::TextBlock(h)) => {
             h.SetTextWrapping(TextWrapping(*v))?;
         }

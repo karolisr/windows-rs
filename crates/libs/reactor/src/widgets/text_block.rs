@@ -10,12 +10,17 @@ pub struct TextBlock {
     pub max_lines: Option<i32>,
     pub text_trimming: Option<TextTrimming>,
     pub text_wrapping: TextWrapping,
+    pub text_alignment: TextAlignment,
     pub is_text_selection_enabled: bool,
 }
 impl TextBlock {
     pub fn new(content: impl Into<String>) -> Self {
         Self {
             text: content.into(),
+            // `TextAlignment` has no zero variant (`Center` is `0`); pin the
+            // native default (`Left`) explicitly rather than inherit
+            // `#[derive(Default)]`'s `TextAlignment(0)`.
+            text_alignment: TextAlignment::Left,
             ..Self::default()
         }
     }
@@ -82,6 +87,11 @@ impl TextBlock {
 
     pub fn selectable(mut self) -> Self {
         self.is_text_selection_enabled = true;
+        self
+    }
+
+    pub fn text_alignment(mut self, v: TextAlignment) -> Self {
+        self.text_alignment = v;
         self
     }
 }

@@ -787,11 +787,12 @@ pub fn text_block_bindings(w: &TextBlock) -> PropBindings {
             PropValue::Bool(w.is_text_selection_enabled),
         ),
         Binding::Prop(Prop::Text, PropValue::Str(w.text.clone())),
+        Binding::Prop(Prop::TextAlignment, PropValue::I32(w.text_alignment.0)),
         Binding::Prop(Prop::TextWrapping, PropValue::I32(w.text_wrapping.0)),
     ]
 }
 pub fn text_box_bindings(w: &TextBox) -> PropBindings {
-    let mut out = Vec::with_capacity(6usize);
+    let mut out = Vec::with_capacity(7usize);
     out.push(Binding::Event(
         Event::TextChanged,
         w.on_text_changed
@@ -812,6 +813,10 @@ pub fn text_box_bindings(w: &TextBox) -> PropBindings {
     out.push(Binding::Prop(
         Prop::PlaceholderText,
         PropValue::Str(w.placeholder_text.clone()),
+    ));
+    out.push(Binding::Prop(
+        Prop::TextAlignment,
+        PropValue::I32(w.text_alignment.0),
     ));
     out.push(Binding::Prop(
         Prop::TextWrapping,

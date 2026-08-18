@@ -31,6 +31,7 @@ pub struct TextBox {
     pub is_enabled: bool,
     pub accepts_return: bool,
     pub text_wrapping: TextWrapping,
+    pub text_alignment: TextAlignment,
     pub border_brush: Option<BrushBinding>,
     pub border_thickness: Option<Thickness>,
 }
@@ -43,6 +44,10 @@ impl TextBox {
         Self {
             value: value.into(),
             is_enabled: true,
+            // `TextAlignment` has no zero variant (`Center` is `0`); pin the
+            // native default (`Left`) explicitly rather than inherit
+            // `#[derive(Default)]`'s `TextAlignment(0)`.
+            text_alignment: TextAlignment::Left,
             ..Default::default()
         }
     }
@@ -103,6 +108,11 @@ impl TextBox {
     pub fn multiline(mut self) -> Self {
         self.accepts_return = true;
         self.text_wrapping = TextWrapping::Wrap;
+        self
+    }
+
+    pub fn text_alignment(mut self, v: TextAlignment) -> Self {
+        self.text_alignment = v;
         self
     }
 

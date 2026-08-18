@@ -243,6 +243,7 @@ pub enum Prop {
     Subtitle,
     Tall,
     Text,
+    TextAlignment,
     TextTrimming,
     TextWrapping,
     TextWrappingWrap,

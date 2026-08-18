@@ -283,6 +283,7 @@ ActionButtonClick = {}
 ["Microsoft.UI.Xaml.Controls.TextBlock"]
 Text = {}
 TextWrapping = {}
+TextAlignment = {}
 IsTextSelectionEnabled = {}
 
 ["Microsoft.UI.Xaml.Controls.TextBox"]
@@ -291,6 +292,7 @@ Header = {}
 IsEnabled = {}
 AcceptsReturn = {}
 TextWrapping = {}
+TextAlignment = {}
 TextChanged = { property = "Text" }
 
 ["Microsoft.UI.Xaml.Controls.TimePicker"]
