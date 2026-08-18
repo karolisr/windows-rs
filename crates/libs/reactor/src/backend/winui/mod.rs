@@ -1766,6 +1766,14 @@ impl Backend for WinUIBackend {
                             let icon_elem = build_icon_element(icon)?;
                             item.SetIcon(&icon_elem)?;
                         }
+                        if let Some(tip) = &def.tooltip {
+                            let dep: bindings::DependencyObject = item.cast()?;
+                            let reference =
+                                windows_reference::IReference::<windows_core::HSTRING>::from(
+                                    tip.as_str(),
+                                );
+                            bindings::ToolTipService::SetToolTip(&dep, Some(&reference.into()))?;
+                        }
                         vec.Append(&item)?;
                     }
                     Ok(())

@@ -7,14 +7,31 @@ pub enum CommandBarCommandDef {
     Button {
         label: String,
         icon: Option<Icon>,
+        tooltip: Option<String>,
     },
     /// A toggle button with optional icon and label.
     Toggle {
         label: String,
         icon: Option<Icon>,
+        tooltip: Option<String>,
     },
     /// A visual separator.
     Separator,
+}
+
+impl CommandBarCommandDef {
+    /// Sets the hover tooltip (`None` leaves WinUI's default, which is the
+    /// label text once truncated/collapsed to an icon-only item).
+    pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+        let tip = Some(text.into());
+        match &mut self {
+            Self::Button { tooltip, .. } | Self::Toggle { tooltip, .. } => {
+                *tooltip = tip;
+            }
+            Self::Separator => {}
+        }
+        self
+    }
 }
 
 /// Builder for a command bar button.
@@ -22,6 +39,7 @@ pub fn app_bar_button(label: impl Into<String>) -> CommandBarCommandDef {
     CommandBarCommandDef::Button {
         label: label.into(),
         icon: None,
+        tooltip: None,
     }
 }
 
@@ -30,6 +48,7 @@ pub fn app_bar_button_icon(label: impl Into<String>, icon: impl Into<Icon>) -> C
     CommandBarCommandDef::Button {
         label: label.into(),
         icon: Some(icon.into()),
+        tooltip: None,
     }
 }
 
@@ -38,6 +57,7 @@ pub fn app_bar_toggle(label: impl Into<String>) -> CommandBarCommandDef {
     CommandBarCommandDef::Toggle {
         label: label.into(),
         icon: None,
+        tooltip: None,
     }
 }
 
@@ -46,6 +66,7 @@ pub fn app_bar_toggle_icon(label: impl Into<String>, icon: impl Into<Icon>) -> C
     CommandBarCommandDef::Toggle {
         label: label.into(),
         icon: Some(icon.into()),
+        tooltip: None,
     }
 }
 

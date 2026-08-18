@@ -7,6 +7,8 @@ pub struct SelectorBarItemDef {
     pub text: String,
     /// Optional icon.
     pub icon: Option<Icon>,
+    /// Hover tooltip (`None` means no explicit tooltip).
+    pub tooltip: Option<String>,
 }
 
 impl SelectorBarItemDef {
@@ -14,11 +16,19 @@ impl SelectorBarItemDef {
         Self {
             text: text.into(),
             icon: None,
+            tooltip: None,
         }
     }
 
     pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
         self.icon = Some(icon.into());
+        self
+    }
+
+    /// Sets the hover tooltip (`None` leaves WinUI's default of no
+    /// tooltip).
+    pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+        self.tooltip = Some(text.into());
         self
     }
 }

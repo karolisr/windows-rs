@@ -278,21 +278,35 @@ pub(super) fn build_command_bar_element(
     def: &CommandBarCommandDef,
 ) -> Result<bindings::ICommandBarElement> {
     match def {
-        CommandBarCommandDef::Button { label, icon } => {
+        CommandBarCommandDef::Button {
+            label,
+            icon,
+            tooltip,
+        } => {
             let btn = bindings::AppBarButton::new()?;
             btn.SetLabel(label)?;
             if let Some(icon) = icon {
                 let icon_elem = build_icon_element(icon)?;
                 btn.SetIcon(&icon_elem)?;
             }
+            if let Some(tip) = tooltip {
+                set_command_bar_element_tooltip(&btn, tip)?;
+            }
             btn.cast()
         }
-        CommandBarCommandDef::Toggle { label, icon } => {
+        CommandBarCommandDef::Toggle {
+            label,
+            icon,
+            tooltip,
+        } => {
             let btn = bindings::AppBarToggleButton::new()?;
             btn.SetLabel(label)?;
             if let Some(icon) = icon {
                 let icon_elem = build_icon_element(icon)?;
                 btn.SetIcon(&icon_elem)?;
+            }
+            if let Some(tip) = tooltip {
+                set_command_bar_element_tooltip(&btn, tip)?;
             }
             btn.cast()
         }
@@ -301,6 +315,20 @@ pub(super) fn build_command_bar_element(
             sep.cast()
         }
     }
+}
+
+/// Sets a plain-text hover tooltip on a `DependencyObject`-castable command
+/// bar element (`AppBarButton`/`AppBarToggleButton`), mirroring the general
+/// [`Tooltip`](crate::Tooltip) modifier's text path
+/// (`WinUIBackend::set_tooltip`) since individual `CommandBar` items are
+/// built imperatively here rather than dispatched through the reconciler.
+fn set_command_bar_element_tooltip<T>(element: &T, text: &str) -> Result<()>
+where
+    T: Interface,
+{
+    let dep: bindings::DependencyObject = element.cast()?;
+    let reference = windows_reference::IReference::<windows_core::HSTRING>::from(text);
+    bindings::ToolTipService::SetToolTip(&dep, Some(&reference.into()))
 }
 
 #[cfg(test)]
