@@ -138,7 +138,9 @@ Microsoft::UI::Xaml::Controls::ITimePicker::SelectedTimeChanged
 Microsoft::UI::Xaml::Controls::ITimePickerSelectedValueChangedEventArgs::get_NewTime
 Microsoft::UI::Xaml::Controls::ITitleBar::{put_Content, put_RightHeader, BackRequested, PaneToggleRequested}
 Microsoft::UI::Xaml::Controls::IToggleSwitch::{get_IsOn, Toggled}
-Microsoft::UI::Xaml::Controls::ITreeView::{get_RootNodes, ItemInvoked}
+Microsoft::UI::Xaml::Controls::ITreeView::{get_RootNodes, ItemInvoked, Expanding, Collapsed}
+Microsoft::UI::Xaml::Controls::ITreeViewCollapsedEventArgs::get_Node
+Microsoft::UI::Xaml::Controls::ITreeViewExpandingEventArgs::get_Node
 Microsoft::UI::Xaml::Controls::ITreeViewItemInvokedEventArgs::get_InvokedItem
 Microsoft::UI::Xaml::Controls::ITreeViewNode::{put_Content, get_Content, put_IsExpanded, get_Children}
 Microsoft::UI::Xaml::Controls::IViewbox::put_Child
@@ -197,6 +199,8 @@ Microsoft::UI::Xaml::Controls::TextChangedEventHandler
 Microsoft::UI::Xaml::Controls::TimePickerSelectedValueChangedEventArgs
 Microsoft::UI::Xaml::Controls::ToolTip::CreateInstance
 Microsoft::UI::Xaml::Controls::ToolTipService::{SetPlacement, SetToolTip}
+Microsoft::UI::Xaml::Controls::TreeViewCollapsedEventArgs
+Microsoft::UI::Xaml::Controls::TreeViewExpandingEventArgs
 Microsoft::UI::Xaml::Controls::TreeViewItemInvokedEventArgs
 Microsoft::UI::Xaml::Controls::TreeViewNode::CreateInstance
 Microsoft::UI::Xaml::Controls::TreeViewSelectionMode

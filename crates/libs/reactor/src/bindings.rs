@@ -16197,6 +16197,70 @@ impl ITreeView {
             ))
         }
     }
+    pub(crate) fn Expanding<F>(
+        &self,
+        handler: F,
+    ) -> windows_core::Result<windows_core::EventRevoker>
+    where
+        F: Fn(windows_core::Ref<TreeView>, windows_core::Ref<TreeViewExpandingEventArgs>) + 'static,
+    {
+        let handler: TypedEventHandler<TreeView, TreeViewExpandingEventArgs> = {
+            let com = windows_core::imp::DelegateBox::<
+                TypedEventHandler<TreeView, TreeViewExpandingEventArgs>,
+                F,
+            >::new(
+                &TypedEventHandlerBox::<TreeView, TreeViewExpandingEventArgs, F>::VTABLE,
+                handler,
+            );
+            unsafe { core::mem::transmute(windows_core::imp::box_new(com)) }
+        };
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            let token__ = (windows_core::Interface::vtable(self).Expanding)(
+                windows_core::Interface::as_raw(self),
+                windows_core::Interface::as_raw(&handler),
+                &mut result__,
+            )
+            .map(|| result__)?;
+            Ok(windows_core::EventRevoker::new(
+                self.clone(),
+                token__,
+                windows_core::Interface::vtable(self).RemoveExpanding,
+            ))
+        }
+    }
+    pub(crate) fn Collapsed<F>(
+        &self,
+        handler: F,
+    ) -> windows_core::Result<windows_core::EventRevoker>
+    where
+        F: Fn(windows_core::Ref<TreeView>, windows_core::Ref<TreeViewCollapsedEventArgs>) + 'static,
+    {
+        let handler: TypedEventHandler<TreeView, TreeViewCollapsedEventArgs> = {
+            let com = windows_core::imp::DelegateBox::<
+                TypedEventHandler<TreeView, TreeViewCollapsedEventArgs>,
+                F,
+            >::new(
+                &TypedEventHandlerBox::<TreeView, TreeViewCollapsedEventArgs, F>::VTABLE,
+                handler,
+            );
+            unsafe { core::mem::transmute(windows_core::imp::box_new(com)) }
+        };
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            let token__ = (windows_core::Interface::vtable(self).Collapsed)(
+                windows_core::Interface::as_raw(self),
+                windows_core::Interface::as_raw(&handler),
+                &mut result__,
+            )
+            .map(|| result__)?;
+            Ok(windows_core::EventRevoker::new(
+                self.clone(),
+                token__,
+                windows_core::Interface::vtable(self).RemoveCollapsed,
+            ))
+        }
+    }
 }
 #[repr(C)]
 pub struct ITreeView_Vtbl {
@@ -16221,6 +16285,78 @@ pub struct ITreeView_Vtbl {
     ) -> windows_core::HRESULT,
     pub RemoveItemInvoked:
         unsafe extern "system" fn(*mut core::ffi::c_void, i64) -> windows_core::HRESULT,
+    pub Expanding: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *mut core::ffi::c_void,
+        *mut i64,
+    ) -> windows_core::HRESULT,
+    pub RemoveExpanding:
+        unsafe extern "system" fn(*mut core::ffi::c_void, i64) -> windows_core::HRESULT,
+    pub Collapsed: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *mut core::ffi::c_void,
+        *mut i64,
+    ) -> windows_core::HRESULT,
+    pub RemoveCollapsed:
+        unsafe extern "system" fn(*mut core::ffi::c_void, i64) -> windows_core::HRESULT,
+}
+windows_core::imp::define_interface!(
+    ITreeViewCollapsedEventArgs,
+    ITreeViewCollapsedEventArgs_Vtbl,
+    0x8ee00b59_42c6_5d73_809f_68710088e5a5
+);
+impl windows_core::RuntimeType for ITreeViewCollapsedEventArgs {
+    const SIGNATURE: windows_core::imp::ConstBuffer =
+        windows_core::imp::ConstBuffer::for_interface::<Self>();
+}
+impl ITreeViewCollapsedEventArgs {
+    pub(crate) fn Node(&self) -> windows_core::Result<TreeViewNode> {
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            (windows_core::Interface::vtable(self).Node)(
+                windows_core::Interface::as_raw(self),
+                &mut result__,
+            )
+            .and_then(|| windows_core::Type::from_abi(result__))
+        }
+    }
+}
+#[repr(C)]
+pub struct ITreeViewCollapsedEventArgs_Vtbl {
+    pub base__: windows_core::IInspectable_Vtbl,
+    pub Node: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *mut *mut core::ffi::c_void,
+    ) -> windows_core::HRESULT,
+}
+windows_core::imp::define_interface!(
+    ITreeViewExpandingEventArgs,
+    ITreeViewExpandingEventArgs_Vtbl,
+    0xbd769ef7_cadc_5334_93ad_c9bbe820643d
+);
+impl windows_core::RuntimeType for ITreeViewExpandingEventArgs {
+    const SIGNATURE: windows_core::imp::ConstBuffer =
+        windows_core::imp::ConstBuffer::for_interface::<Self>();
+}
+impl ITreeViewExpandingEventArgs {
+    pub(crate) fn Node(&self) -> windows_core::Result<TreeViewNode> {
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            (windows_core::Interface::vtable(self).Node)(
+                windows_core::Interface::as_raw(self),
+                &mut result__,
+            )
+            .and_then(|| windows_core::Type::from_abi(result__))
+        }
+    }
+}
+#[repr(C)]
+pub struct ITreeViewExpandingEventArgs_Vtbl {
+    pub base__: windows_core::IInspectable_Vtbl,
+    pub Node: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *mut *mut core::ffi::c_void,
+    ) -> windows_core::HRESULT,
 }
 windows_core::imp::define_interface!(
     ITreeViewFactory,
@@ -23788,6 +23924,60 @@ impl windows_core::RuntimeName for TreeView {
 }
 unsafe impl Send for TreeView {}
 unsafe impl Sync for TreeView {}
+#[repr(transparent)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TreeViewCollapsedEventArgs(windows_core::IUnknown);
+windows_core::imp::interface_hierarchy!(
+    TreeViewCollapsedEventArgs,
+    windows_core::IUnknown,
+    windows_core::IInspectable
+);
+impl windows_core::RuntimeType for TreeViewCollapsedEventArgs {
+    const SIGNATURE: windows_core::imp::ConstBuffer =
+        windows_core::imp::ConstBuffer::for_class::<Self, ITreeViewCollapsedEventArgs>();
+}
+unsafe impl windows_core::Interface for TreeViewCollapsedEventArgs {
+    type Vtable = <ITreeViewCollapsedEventArgs as windows_core::Interface>::Vtable;
+    const IID: windows_core::GUID = <ITreeViewCollapsedEventArgs as windows_core::Interface>::IID;
+}
+impl core::ops::Deref for TreeViewCollapsedEventArgs {
+    type Target = ITreeViewCollapsedEventArgs;
+    fn deref(&self) -> &Self::Target {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+impl windows_core::RuntimeName for TreeViewCollapsedEventArgs {
+    const NAME: &'static str = "Microsoft.UI.Xaml.Controls.TreeViewCollapsedEventArgs";
+}
+unsafe impl Send for TreeViewCollapsedEventArgs {}
+unsafe impl Sync for TreeViewCollapsedEventArgs {}
+#[repr(transparent)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TreeViewExpandingEventArgs(windows_core::IUnknown);
+windows_core::imp::interface_hierarchy!(
+    TreeViewExpandingEventArgs,
+    windows_core::IUnknown,
+    windows_core::IInspectable
+);
+impl windows_core::RuntimeType for TreeViewExpandingEventArgs {
+    const SIGNATURE: windows_core::imp::ConstBuffer =
+        windows_core::imp::ConstBuffer::for_class::<Self, ITreeViewExpandingEventArgs>();
+}
+unsafe impl windows_core::Interface for TreeViewExpandingEventArgs {
+    type Vtable = <ITreeViewExpandingEventArgs as windows_core::Interface>::Vtable;
+    const IID: windows_core::GUID = <ITreeViewExpandingEventArgs as windows_core::Interface>::IID;
+}
+impl core::ops::Deref for TreeViewExpandingEventArgs {
+    type Target = ITreeViewExpandingEventArgs;
+    fn deref(&self) -> &Self::Target {
+        unsafe { core::mem::transmute(self) }
+    }
+}
+impl windows_core::RuntimeName for TreeViewExpandingEventArgs {
+    const NAME: &'static str = "Microsoft.UI.Xaml.Controls.TreeViewExpandingEventArgs";
+}
+unsafe impl Send for TreeViewExpandingEventArgs {}
+unsafe impl Sync for TreeViewExpandingEventArgs {}
 #[repr(transparent)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TreeViewItemInvokedEventArgs(windows_core::IUnknown);
