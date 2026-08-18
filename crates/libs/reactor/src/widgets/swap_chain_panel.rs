@@ -1,5 +1,65 @@
 use super::*;
+use std::cell::RefCell;
 use std::rc::Rc;
+
+/// Pointer sample in logical (DIP) coordinates relative to the panel.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PanelPointerSample {
+    pub x: f64,
+    pub y: f64,
+    pub is_left: bool,
+    pub is_right: bool,
+}
+
+/// Wheel sample in logical (DIP) coordinates relative to the panel.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PanelWheelSample {
+    pub x: f64,
+    pub y: f64,
+    pub delta_y: f64,
+}
+
+/// Optional pointer / wheel callbacks for
+/// [`SwapChainPanelHandle::attach_input`].
+#[derive(Clone, Default)]
+pub struct SwapChainPanelInput {
+    pub on_pointer_down: Option<Callback<PanelPointerSample>>,
+    pub on_pointer_move: Option<Callback<PanelPointerSample>>,
+    pub on_pointer_up: Option<Callback<PanelPointerSample>>,
+    pub on_pointer_enter: Option<Callback<PanelPointerSample>>,
+    pub on_pointer_exit: Option<Callback<()>>,
+    pub on_wheel: Option<Callback<PanelWheelSample>>,
+}
+
+fn panel_pointer_sample(
+    args: &bindings::PointerRoutedEventArgs,
+    relative_to: &bindings::UIElement,
+) -> Option<PanelPointerSample> {
+    let point = args.GetCurrentPoint(relative_to).ok()?;
+    let pos = point.Position().ok()?;
+    let props = point.Properties().ok()?;
+    Some(PanelPointerSample {
+        x: pos.x as f64,
+        y: pos.y as f64,
+        is_left: props.IsLeftButtonPressed().unwrap_or(false),
+        is_right: props.IsRightButtonPressed().unwrap_or(false),
+    })
+}
+
+fn panel_wheel_sample(
+    args: &bindings::PointerRoutedEventArgs,
+    relative_to: &bindings::UIElement,
+) -> Option<PanelWheelSample> {
+    let point = args.GetCurrentPoint(relative_to).ok()?;
+    let pos = point.Position().ok()?;
+    let props = point.Properties().ok()?;
+    let delta = props.MouseWheelDelta().unwrap_or(0) as f64 / 120.0;
+    Some(PanelWheelSample {
+        x: pos.x as f64,
+        y: pos.y as f64,
+        delta_y: delta,
+    })
+}
 
 /// Opaque handle to the native `SwapChainPanel` control, passed to the
 /// [`on_mounted`](SwapChainPanel::on_mounted) callback.
@@ -74,6 +134,87 @@ impl SwapChainPanelHandle {
                 f(x, y);
             }
         })
+    }
+
+    /// Subscribes to pointer and wheel events on the native panel.
+    ///
+    /// Subscriptions live until the panel is destroyed. Call once per mount
+    /// (for example from an [`on_mounted`](SwapChainPanel::on_mounted)
+    /// callback).
+    pub fn attach_input(&self, input: SwapChainPanelInput) -> Result<()> {
+        let ui: bindings::UIElement = self.0.cast()?;
+        let iue: bindings::IUIElement = ui.cast()?;
+        let ui_for_events = ui.clone();
+        let revokers: Rc<RefCell<Vec<windows_core::EventRevoker>>> =
+            Rc::new(RefCell::new(Vec::new()));
+
+        if let Some(cb) = input.on_pointer_down {
+            let ui = ui_for_events.clone();
+            revokers.borrow_mut().push(iue.PointerPressed(move |_sender, args| {
+                if let Some(args) = args.as_ref()
+                    && let Some(sample) = panel_pointer_sample(args, &ui)
+                {
+                    cb.invoke(sample);
+                }
+            })?);
+        }
+
+        if let Some(cb) = input.on_pointer_up {
+            let ui = ui_for_events.clone();
+            revokers.borrow_mut().push(iue.PointerReleased(move |_sender, args| {
+                if let Some(args) = args.as_ref()
+                    && let Some(sample) = panel_pointer_sample(args, &ui)
+                {
+                    cb.invoke(sample);
+                }
+            })?);
+        }
+
+        if let Some(cb) = input.on_pointer_move {
+            let ui = ui_for_events.clone();
+            revokers.borrow_mut().push(iue.PointerMoved(move |_sender, args| {
+                if let Some(args) = args.as_ref()
+                    && let Some(sample) = panel_pointer_sample(args, &ui)
+                {
+                    cb.invoke(sample);
+                }
+            })?);
+        }
+
+        if let Some(cb) = input.on_pointer_enter {
+            let ui = ui_for_events.clone();
+            revokers.borrow_mut().push(iue.PointerEntered(move |_sender, args| {
+                if let Some(args) = args.as_ref()
+                    && let Some(sample) = panel_pointer_sample(args, &ui)
+                {
+                    cb.invoke(sample);
+                }
+            })?);
+        }
+
+        if let Some(cb) = input.on_pointer_exit {
+            revokers
+                .borrow_mut()
+                .push(iue.PointerExited(move |_sender, _args| {
+                    cb.invoke(());
+                })?);
+        }
+
+        if let Some(cb) = input.on_wheel {
+            let ui = ui_for_events;
+            revokers.borrow_mut().push(iue.PointerWheelChanged(move |_sender, args| {
+                if let Some(args) = args.as_ref()
+                    && let Some(sample) = panel_wheel_sample(args, &ui)
+                {
+                    cb.invoke(sample);
+                }
+            })?);
+        }
+
+        // Subscriptions must outlive this call; the panel has no explicit
+        // teardown hook to revoke them from, so leak them intentionally.
+        std::mem::forget(revokers);
+        Ok(())
     }
 }
 
