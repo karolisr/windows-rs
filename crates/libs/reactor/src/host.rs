@@ -469,6 +469,25 @@ impl ReactorHost {
         *self.icon.borrow_mut() = Some(path.into());
     }
 
+    /// Registers a callback invoked when the native window closes (WinUI
+    /// `Window::Closed`).
+    ///
+    /// Intended for secondary/auxiliary windows created directly via
+    /// [`Self::new_with_window_options`] (not through [`App::run`]'s window
+    /// registry, which already wires its own `Closed`-driven cleanup) — for
+    /// example to re-enable a modal owner once an auxiliary shell closes.
+    ///
+    /// The underlying WinUI event token is intentionally leaked to WinUI for
+    /// the life of the window, mirroring how the window registry subscribes
+    /// to `Closed` internally for windows opened via [`App::run`]: the
+    /// callback's only reason to run is the window closing, at which point
+    /// WinUI drops its side of the subscription too.
+    pub fn on_closed(&self, f: impl Fn() + 'static) -> Result<()> {
+        let revoker = self.state.window().Closed(move |_, _| f())?;
+        revoker.into_token();
+        Ok(())
+    }
+
     pub fn activate(&self) -> Result<()> {
         let presenter = self.presenter.get();
         let backdrop = self.backdrop.get();
