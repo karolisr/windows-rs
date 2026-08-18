@@ -34,6 +34,40 @@ pub fn set_backdrop(backdrop: Option<Backdrop>) {
     let _ = with_active_host(|h| h.apply_backdrop(backdrop));
 }
 
+/// Sets minimum window size limits on the active window, applied
+/// immediately and re-applied on every subsequent resize.
+///
+/// This is a no-op if no window has been registered yet, so call it from
+/// within a running app rather than before [`App::run`].
+pub fn set_window_min_size_limits(limits: WindowMinSizeLimits) {
+    let _ = with_active_host(|h| h.set_min_size_limits(limits));
+}
+
+/// Moves the top-left corner of the active window to (`x`, `y`) in screen
+/// coordinates (logical DIP units, origin at the top-left of the primary
+/// display).
+///
+/// This is a no-op if no window has been registered yet, so call it from
+/// within a running app rather than before [`App::run`].
+pub fn set_window_position(x: f64, y: f64) {
+    let _ = with_active_host(|h| h.set_position(x, y));
+}
+
+/// Whether the active window is currently the OS foreground window.
+///
+/// Used for inactive-selection styling (for example table row highlights).
+/// Returns `true` if no window has been registered yet.
+pub fn window_is_active() -> bool {
+    with_active_host(|h| h.is_active()).unwrap_or(true)
+}
+
+/// Returns the active window's current DPI scale (`dpi / 96.0`).
+///
+/// Returns `None` if no window has been registered yet.
+pub fn host_dpi_scale() -> Option<f64> {
+    with_active_host(|h| h.dpi_scale())
+}
+
 /// Per-window state shared between a [`ReactorHost`], its `post_render` attach
 /// closure, and its backend. Holds the window plus the content root and any
 /// theme / title-bar requests queued before the root element exists.
@@ -47,15 +81,23 @@ pub(crate) struct HostWindowState {
     pending_theme: Cell<Option<ElementTheme>>,
     /// Title-bar height option requested before the title bar was wired.
     pending_tall: Cell<Option<bool>>,
+    /// Min/max size constraints captured at window construction; re-applied
+    /// on every resize alongside `min_size_limits`.
+    constraints: InnerConstraints,
+    /// Additional minimum size limits, unlike `constraints` settable any
+    /// time after the window has been created.
+    min_size_limits: Cell<WindowMinSizeLimits>,
 }
 
 impl HostWindowState {
-    fn new(window: Window) -> Rc<Self> {
+    fn new(window: Window, constraints: InnerConstraints) -> Rc<Self> {
         Rc::new(Self {
             window,
             root_fe: RefCell::new(None),
             pending_theme: Cell::new(None),
             pending_tall: Cell::new(None),
+            constraints,
+            min_size_limits: Cell::new(WindowMinSizeLimits::default()),
         })
     }
 
@@ -226,7 +268,7 @@ impl ReactorHost {
         F: FnOnce(&mut Reconciler<WinUIBackend>),
     {
         let (window, resolved_dip_size, initial_dpi) = create_window(title, size, constraints)?;
-        let state = HostWindowState::new(window);
+        let state = HostWindowState::new(window, constraints);
         let dispatcher = WinUIDispatcher::for_current_thread()?;
         let marshaller = dispatcher.marshaller();
         let backend = WinUIBackend::new();
@@ -267,8 +309,7 @@ impl ReactorHost {
                                 subscribe_size_and_dpi(
                                     &fe,
                                     render_host.downgrade(),
-                                    state_for_post.window().clone(),
-                                    constraints,
+                                    Rc::clone(&state_for_post),
                                 );
                                 // Records the root and flushes any theme that
                                 // was requested before it existed (e.g. from a
@@ -333,6 +374,71 @@ impl ReactorHost {
     /// Set this window's title-bar height option (tall / standard).
     pub fn set_titlebar_height(&self, tall: bool) {
         self.state.set_titlebar_height(tall);
+    }
+
+    /// Sets minimum window size limits, re-applied to the
+    /// `OverlappedPresenter` immediately and again on every subsequent
+    /// resize alongside any construction-time [`InnerConstraints`] minimums
+    /// (the larger of the two wins per axis). Unlike `InnerConstraints`,
+    /// this can be called any time after the window has been created.
+    pub fn set_min_size_limits(&self, limits: WindowMinSizeLimits) -> Result<()> {
+        self.state.min_size_limits.set(limits);
+        apply_constraints_for_window(
+            self.state.window(),
+            self.render_host.dpi(),
+            &self.state.constraints,
+            &limits,
+        )
+    }
+
+    /// Moves the top-left corner of the window to (`x`, `y`) in screen
+    /// coordinates (logical DIP units, origin at the top-left of the
+    /// primary display).
+    pub fn set_position(&self, x: f64, y: f64) -> Result<()> {
+        let mut hwnd = HWND::default();
+        unsafe {
+            self.state
+                .window()
+                .cast::<IWindowNative>()?
+                .WindowHandle(&mut hwnd)
+                .ok()?;
+        }
+        let dpi = unsafe { GetDpiForWindow(hwnd) };
+        let dpi = if dpi == 0 { 96 } else { dpi };
+        let scale = dpi as f64 / 96.0;
+        unsafe {
+            SetWindowPos(
+                hwnd,
+                HWND::default(),
+                (x * scale).round() as i32,
+                (y * scale).round() as i32,
+                0,
+                0,
+                (SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE) as u32,
+            )
+            .ok()?;
+        }
+        Ok(())
+    }
+
+    /// Whether this window is currently the OS foreground window.
+    ///
+    /// Used for inactive-selection styling (for example table row
+    /// highlights).
+    pub fn is_active(&self) -> bool {
+        let mut hwnd = HWND::default();
+        let Ok(native) = self.state.window().cast::<IWindowNative>() else {
+            return true;
+        };
+        if unsafe { native.WindowHandle(&mut hwnd) }.ok().is_err() || hwnd.is_null() {
+            return true;
+        }
+        unsafe { GetForegroundWindow() == hwnd }
+    }
+
+    /// Returns this window's current DPI scale (`dpi / 96.0`).
+    pub fn dpi_scale(&self) -> f64 {
+        self.render_host.dpi() as f64 / 96.0
     }
 
     /// Set the window icon from a path to an `.ico` file, used for the
@@ -472,11 +578,10 @@ fn center_window_on_display(
 fn subscribe_size_and_dpi(
     fe: &FrameworkElement,
     render_host: WeakRenderHost<WinUIBackend, WinUIDispatcher>,
-    window: Window,
-    constraints: InnerConstraints,
+    state: Rc<HostWindowState>,
 ) {
     let mut hwnd: HWND = HWND::default();
-    if let Ok(native) = window.cast::<IWindowNative>() {
+    if let Ok(native) = state.window().cast::<IWindowNative>() {
         let _ = unsafe { native.WindowHandle(&mut hwnd) };
     }
 
@@ -494,7 +599,12 @@ fn subscribe_size_and_dpi(
                 width: size.width as f64,
                 height: size.height as f64,
             });
-            let _ = apply_constraints_for_window(&window, render_host.dpi(), &constraints);
+            let _ = apply_constraints_for_window(
+                state.window(),
+                render_host.dpi(),
+                &state.constraints,
+                &state.min_size_limits.get(),
+            );
         })
         .ok()
         .map(|r| r.into_token());
@@ -574,12 +684,22 @@ fn create_window(
     Ok((window, actual_dip_size, dpi))
 }
 
-/// Re-apply DIP `constraints` to the window's `OverlappedPresenter`,
-/// re-measuring the non-client offset at current DPI.
+/// Re-apply DIP `constraints` and `limits` to the window's
+/// `OverlappedPresenter`, re-measuring the non-client offset at current DPI.
+///
+/// Maximums come solely from `constraints` (fixed at window construction —
+/// there is no runtime-mutable max-size API). Minimums are the larger of
+/// `constraints`'s legacy `min_width`/`min_height` and `limits`'s
+/// runtime-mutable `content_min`/`outer_min`, so either source can raise the
+/// effective floor. This call is unconditional even when every minimum
+/// source is `None`, which clears any previously-set preferred minimum —
+/// required so that lowering/removing a limit at runtime actually takes
+/// effect on the next resize instead of leaving a stale floor in place.
 fn apply_constraints_for_window(
     window: &Window,
     dpi: u32,
     constraints: &InnerConstraints,
+    limits: &WindowMinSizeLimits,
 ) -> Result<()> {
     let dip_scale = dpi as f64 / 96.0;
     let dip_to_px = |dips: f64| (dips * dip_scale).round() as i32;
@@ -594,12 +714,27 @@ fn apply_constraints_for_window(
 
     let presenter = app_window.Presenter()?.cast::<IOverlappedPresenter3>()?;
 
-    if let Some(min_w) = constraints.min_width {
-        presenter.SetPreferredMinimumWidth(Some(dip_to_px(min_w).saturating_add(nc_width_px)))?;
+    let mut min_outer_w = constraints
+        .min_width
+        .map(|w| dip_to_px(w.max(0.0)).saturating_add(nc_width_px));
+    let mut min_outer_h = constraints
+        .min_height
+        .map(|h| dip_to_px(h.max(0.0)).saturating_add(nc_height_px));
+    if let Some(content_min) = limits.content_min {
+        let w = dip_to_px(content_min.width.max(0.0)).saturating_add(nc_width_px);
+        let h = dip_to_px(content_min.height.max(0.0)).saturating_add(nc_height_px);
+        min_outer_w = Some(min_outer_w.map_or(w, |cur| cur.max(w)));
+        min_outer_h = Some(min_outer_h.map_or(h, |cur| cur.max(h)));
     }
-    if let Some(min_h) = constraints.min_height {
-        presenter.SetPreferredMinimumHeight(Some(dip_to_px(min_h).saturating_add(nc_height_px)))?;
+    if let Some(outer_min) = limits.outer_min {
+        let w = dip_to_px(outer_min.width.max(0.0));
+        let h = dip_to_px(outer_min.height.max(0.0));
+        min_outer_w = Some(min_outer_w.map_or(w, |cur| cur.max(w)));
+        min_outer_h = Some(min_outer_h.map_or(h, |cur| cur.max(h)));
     }
+    presenter.SetPreferredMinimumWidth(min_outer_w)?;
+    presenter.SetPreferredMinimumHeight(min_outer_h)?;
+
     if let Some(max_w) = constraints.max_width {
         presenter.SetPreferredMaximumWidth(Some(dip_to_px(max_w).saturating_add(nc_width_px)))?;
     }

@@ -180,6 +180,22 @@ pub struct InnerConstraints {
     pub max_height: Option<f64>,
 }
 
+/// Minimum window size limits in logical (DIP) units, settable at any time
+/// (unlike [`InnerConstraints`], which is captured once at window
+/// construction).
+///
+/// `content_min` applies to the client/content area; non-client chrome
+/// (title bar, borders) is added automatically when enforcing it on the
+/// native window. `outer_min` applies to the full window frame including
+/// that chrome. When both are set, and when [`InnerConstraints`]'s
+/// `min_width`/`min_height` are also set on the same window, the largest
+/// resulting outer minimum wins per axis.
+#[derive(Copy, Clone, Debug, PartialEq, Default)]
+pub struct WindowMinSizeLimits {
+    pub content_min: Option<WindowSize>,
+    pub outer_min: Option<WindowSize>,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ScalarTransition {
     pub duration: Duration,
