@@ -10,6 +10,8 @@ pub enum MenuItemDef {
         /// Whether the item is interactive. Disabled items are greyed out
         /// and do not raise click events.
         is_enabled: bool,
+        /// Optional icon shown to the left of the text.
+        icon: Option<Icon>,
     },
     /// A visual separator line.
     Separator,
@@ -20,19 +22,30 @@ pub enum MenuItemDef {
     },
 }
 
-/// Builder for an enabled [`MenuItemDef::Item`].
+/// Builder for an enabled [`MenuItemDef::Item`] with no icon.
 pub fn menu_item(text: impl Into<String>) -> MenuItemDef {
     MenuItemDef::Item {
         text: text.into(),
         is_enabled: true,
+        icon: None,
     }
 }
 
-/// Builder for a disabled (greyed-out) [`MenuItemDef::Item`].
+/// Builder for a disabled (greyed-out) [`MenuItemDef::Item`] with no icon.
 pub fn menu_item_disabled(text: impl Into<String>) -> MenuItemDef {
     MenuItemDef::Item {
         text: text.into(),
         is_enabled: false,
+        icon: None,
+    }
+}
+
+/// Builder for an enabled [`MenuItemDef::Item`] with an icon.
+pub fn menu_item_icon(text: impl Into<String>, icon: impl Into<Icon>) -> MenuItemDef {
+    MenuItemDef::Item {
+        text: text.into(),
+        is_enabled: true,
+        icon: Some(icon.into()),
     }
 }
 
