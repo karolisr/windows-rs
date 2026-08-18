@@ -2648,6 +2648,39 @@ impl Backend for WinUIBackend {
                     .unwrap(),
                 );
             }
+            // RNG PATCH: chevron-driven expand/collapse, needed for
+            // TreeView::on_expand/on_collapse (rust-native-gui uses these for
+            // lazy child-node loading, not a plain ItemInvoked label click).
+            (Event::Expanding, Handle::TreeView(tv)) => {
+                let expand_handler = handler.clone();
+                revokers.push(
+                    tv.Expanding(move |_sender, args| {
+                        let text = args
+                            .as_ref()
+                            .and_then(|a| a.Node().ok())
+                            .map(|node| tree_view_node_label(&node))
+                            .unwrap_or_default();
+                        if !text.is_empty() {
+                            expand_handler.invoke_string(format!("+{text}"));
+                        }
+                    })
+                    .unwrap(),
+                );
+                let collapse_handler = handler.clone();
+                revokers.push(
+                    tv.Collapsed(move |_sender, args| {
+                        let text = args
+                            .as_ref()
+                            .and_then(|a| a.Node().ok())
+                            .map(|node| tree_view_node_label(&node))
+                            .unwrap_or_default();
+                        if !text.is_empty() {
+                            collapse_handler.invoke_string(format!("-{text}"));
+                        }
+                    })
+                    .unwrap(),
+                );
+            }
             (Event::Click, Handle::CommandBar(cb)) => {
                 self.menu_click_handlers
                     .borrow_mut()

@@ -256,6 +256,23 @@ pub(super) fn build_tree_view_node(def: &TreeNodeDef) -> Result<bindings::TreeVi
     Ok(node)
 }
 
+/// Reads the display label from a [`bindings::TreeViewNode`]'s `Content`
+/// property (an `IReference<HSTRING>`), for use by `ItemInvoked`/`Expanding`/
+/// `Collapsed` dispatch in `backend/winui/mod.rs`. Returns an empty string on
+/// any lookup/cast failure (e.g. non-string content).
+pub(super) fn tree_view_node_label(node: &bindings::TreeViewNode) -> String {
+    node.Content()
+        .ok()
+        .and_then(|content| {
+            content
+                .cast::<windows_reference::IReference<windows_core::HSTRING>>()
+                .ok()
+                .and_then(|r| r.Value().ok())
+        })
+        .map(|h| h.to_string_lossy())
+        .unwrap_or_default()
+}
+
 /// Builds a WinUI `ICommandBarElement` from a [`CommandBarCommandDef`].
 pub(super) fn build_command_bar_element(
     def: &CommandBarCommandDef,

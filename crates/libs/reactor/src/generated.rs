@@ -901,6 +901,12 @@ pub fn toggle_switch_bindings(w: &ToggleSwitch) -> PropBindings {
 pub fn tree_view_bindings(w: &TreeView) -> PropBindings {
     vec![
         Binding::Event(
+            Event::Expanding,
+            w.on_expansion_changed
+                .as_ref()
+                .map(|cb| EventHandler::Str(cb.clone())),
+        ),
+        Binding::Event(
             Event::ItemInvoked,
             w.on_item_invoked
                 .as_ref()

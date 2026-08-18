@@ -326,6 +326,7 @@ Toggled = { property = "IsOn" }
 ["Microsoft.UI.Xaml.Controls.TreeView"]
 SelectionMode = {}
 ItemInvoked = { manual = true, type = "Str" }
+Expanding = { manual = true, type = "Str", field = "on_expansion_changed" }
 
 ["Microsoft.UI.Xaml.Controls.Viewbox"]
 Stretch = {}

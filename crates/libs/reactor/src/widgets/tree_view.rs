@@ -49,6 +49,11 @@ pub struct TreeView {
     pub nodes: Vec<TreeNodeDef>,
     pub selection_mode: TreeViewSelectionMode,
     pub on_item_invoked: Option<Callback<String>>,
+    /// Fires on a chevron-driven expand/collapse (not on a plain label
+    /// click, which fires [`Self::on_item_invoked`] instead). The callback
+    /// receives `"+{label}"` when a node expands and `"-{label}"` when it
+    /// collapses.
+    pub on_expansion_changed: Option<Callback<String>>,
 }
 impl Default for TreeView {
     fn default() -> Self {
@@ -58,6 +63,7 @@ impl Default for TreeView {
             nodes: Vec::new(),
             selection_mode: TreeViewSelectionMode::Single,
             on_item_invoked: None,
+            on_expansion_changed: None,
         }
     }
 }
@@ -77,6 +83,13 @@ impl TreeView {
 
     pub fn on_item_invoked(mut self, f: impl IntoCallback<String>) -> Self {
         self.on_item_invoked = Some(f.into_callback());
+        self
+    }
+
+    /// Registers a callback for chevron-driven expand/collapse. See
+    /// [`Self::on_expansion_changed`] field docs for the message format.
+    pub fn on_expansion_changed(mut self, f: impl IntoCallback<String>) -> Self {
+        self.on_expansion_changed = Some(f.into_callback());
         self
     }
 }
