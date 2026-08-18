@@ -34,6 +34,24 @@ impl SwapChainPanelHandle {
         unsafe { native.SetSwapChain(std::ptr::null_mut()).ok() }
     }
 
+    /// Returns the panel's laid-out size in logical (DIP) units.
+    pub fn actual_size(&self) -> Result<(f64, f64)> {
+        let fe: bindings::IFrameworkElement = self.0.cast()?;
+        Ok((fe.ActualWidth()?, fe.ActualHeight()?))
+    }
+
+    /// Returns the host XAML rasterization scale (DPI scale factor).
+    ///
+    /// Prefer this over [`composition_scale`](Self::composition_scale) for
+    /// WinUI 3 desktop hosts: `SwapChainPanel.CompositionScaleX/Y` can remain
+    /// `1.0` even when the window is rendered at higher DPI, while
+    /// `XamlRoot.RasterizationScale` tracks the effective per-window scale.
+    pub fn rasterization_scale(&self) -> Result<f64> {
+        let element: bindings::IUIElement = self.0.cast()?;
+        let root = element.XamlRoot()?;
+        root.RasterizationScale()
+    }
+
     /// Returns the current composition scale as `(scale_x, scale_y)`.
     pub fn composition_scale(&self) -> Result<(f32, f32)> {
         let panel: bindings::ISwapChainPanel = self.0.cast()?;
@@ -121,16 +139,26 @@ impl SwapChainPanel {
                     return;
                 };
                 if let Ok(fe) = native.cast::<bindings::IFrameworkElement>() {
-                    let f = f.clone();
+                    let f_for_changed = f.clone();
                     if let Ok(revoker) = fe.SizeChanged(move |_sender, args| {
                         if let Some(args) = args.as_ref()
                             && let Ok(s) = args.NewSize()
                         {
-                            f(s.width as f64, s.height as f64);
+                            f_for_changed(s.width as f64, s.height as f64);
                         }
                     }) {
                         // `into_token` avoids pinning the element alive forever.
                         let _ = revoker.into_token();
+                    }
+                    // If layout already ran before the subscription was
+                    // added, `SizeChanged` will not replay — seed the
+                    // callback once so first-show paints are not skipped.
+                    if let Ok(w) = fe.ActualWidth()
+                        && let Ok(h) = fe.ActualHeight()
+                        && w > 0.0
+                        && h > 0.0
+                    {
+                        f(w, h);
                     }
                 }
             },
