@@ -9,6 +9,7 @@ use super::*;
 
 mod winui;
 
+pub(crate) use winui::MenuSlot;
 pub use winui::WinUIBackend;
 
 /// Opaque, non-zero handle the backend assigns to every live control.

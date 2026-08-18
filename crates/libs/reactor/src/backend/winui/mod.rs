@@ -10,6 +10,70 @@ mod generated_attach_event;
 mod generated_set_prop;
 use convert::*;
 
+/// Per-slot classification of a context-flyout item, used by the `Opening`
+/// handler to dynamically show/hide native edit commands against the host
+/// control's current edit state. Indexed in lock-step with the flyout's
+/// `Items` collection.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum MenuSlot {
+    Edit(TextEditCommand),
+    Separator,
+    Extra,
+}
+
+/// Snapshot of the host text control's edit state, queried when a context
+/// flyout is about to open so the merged edit-command items can be shown or
+/// collapsed to match WinUI's native dynamic behavior.
+enum EditState {
+    TextBox {
+        can_undo: bool,
+        can_redo: bool,
+        can_paste: bool,
+        selection_length: i32,
+        is_read_only: bool,
+        text_length: i32,
+    },
+    Password {
+        can_paste: bool,
+        text_length: i32,
+    },
+}
+
+impl EditState {
+    /// Whether a given edit command should be visible (present) in the menu.
+    /// Inapplicable commands are collapsed rather than disabled, matching the
+    /// native `TextCommandBarFlyout` which adds/removes items dynamically.
+    fn command_visible(&self, cmd: TextEditCommand) -> bool {
+        match self {
+            Self::TextBox {
+                can_undo,
+                can_redo,
+                can_paste,
+                selection_length,
+                is_read_only,
+                text_length,
+            } => match cmd {
+                TextEditCommand::Undo => *can_undo,
+                TextEditCommand::Redo => *can_redo,
+                TextEditCommand::Cut => *selection_length > 0 && !*is_read_only,
+                TextEditCommand::Copy => *selection_length > 0,
+                TextEditCommand::Paste => *can_paste,
+                TextEditCommand::SelectAll => *text_length > 0 && *selection_length < *text_length,
+            },
+            Self::Password {
+                can_paste,
+                text_length,
+            } => match cmd {
+                // PasswordBox masks content: only Paste and Select All are
+                // natively offered; Cut/Copy/Undo/Redo are not supported.
+                TextEditCommand::Paste => *can_paste,
+                TextEditCommand::SelectAll => *text_length > 0,
+                _ => false,
+            },
+        }
+    }
+}
+
 /// Keeps `Handle`, `ControlKind` construction, and diagnostics in one table.
 macro_rules! define_handles {
     ( $( $variant:ident ),* $(,)? ) => {
@@ -136,6 +200,13 @@ pub struct WinUIBackend {
     content_template: RefCell<Option<bindings::DataTemplate>>,
     pointer_revokers: RefCell<FxHashMap<ControlId, PointerRevokerSet>>,
     drag_revokers: RefCell<FxHashMap<ControlId, DragRevokerSet>>,
+    /// Context flyouts manually shown via `ContextRequested` + `ShowAt` for
+    /// `AutoSuggestBox`. A `put_ContextFlyout` on the box itself is never
+    /// shown because its inner `TextBox` owns native context-menu handling,
+    /// so the merged menu is shown by hand at the pointer position instead.
+    auto_suggest_context_menus: RefCell<FxHashMap<ControlId, bindings::MenuFlyout>>,
+    auto_suggest_context_requested_revokers:
+        RefCell<FxHashMap<ControlId, windows_core::EventRevoker>>,
     menu_click_handlers: RefCell<FxHashMap<ControlId, EventHandler>>,
     command_bar_flyout_handlers: RefCell<FxHashMap<ControlId, EventHandler>>,
     theme_brush_registry: RefCell<FxHashMap<ControlId, Vec<(Prop, ThemeRef)>>>,
@@ -224,6 +295,8 @@ impl WinUIBackend {
             content_template: RefCell::new(None),
             pointer_revokers: RefCell::new(FxHashMap::default()),
             drag_revokers: RefCell::new(FxHashMap::default()),
+            auto_suggest_context_menus: RefCell::new(FxHashMap::default()),
+            auto_suggest_context_requested_revokers: RefCell::new(FxHashMap::default()),
             menu_click_handlers: RefCell::new(FxHashMap::default()),
             command_bar_flyout_handlers: RefCell::new(FxHashMap::default()),
             theme_brush_registry: RefCell::new(FxHashMap::default()),
@@ -1214,6 +1287,427 @@ fn unbox_index(value: &windows_core::IInspectable) -> Option<usize> {
 }
 
 const CONTENT_TEMPLATE_XAML: &str = "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'><ContentControl HorizontalContentAlignment='Stretch' VerticalContentAlignment='Stretch'/></DataTemplate>";
+
+impl WinUIBackend {
+    /// Wires `Click` on every flyout item to `handler`, skipping the indices
+    /// already wired to a native edit command by [`Self::build_context_menu_flyout`].
+    fn wire_context_flyout_clicks(
+        items: &windows_collections::IVector<bindings::MenuFlyoutItemBase>,
+        skip_indices: &FxHashSet<usize>,
+        handler: &Callback<String>,
+        revokers: &mut Vec<windows_core::EventRevoker>,
+    ) {
+        for i in 0..items.Size().unwrap_or(0) {
+            if skip_indices.contains(&(i as usize)) {
+                continue;
+            }
+            let Ok(base) = items.GetAt(i) else { continue };
+            if let Ok(item) = base.cast::<bindings::MenuFlyoutItem>() {
+                let text = item.Text().unwrap_or_default();
+                let handler = handler.clone();
+                if let Ok(rev) = item.Click(move |_s, _a| {
+                    handler.invoke(text.clone());
+                }) {
+                    revokers.push(rev);
+                }
+            } else if let Ok(sub) = base.cast::<bindings::MenuFlyoutSubItem>()
+                && let Ok(sub_items) = sub.Items()
+            {
+                Self::wire_context_flyout_clicks(&sub_items, skip_indices, handler, revokers);
+            }
+        }
+    }
+
+    /// Depth-first search for the first `TextBox` in `root`'s visual tree,
+    /// used to reach `AutoSuggestBox`'s templated inner `TextBox`.
+    fn find_text_box_descendant(root: &bindings::DependencyObject) -> Option<bindings::TextBox> {
+        if let Ok(tb) = root.cast::<bindings::TextBox>() {
+            return Some(tb);
+        }
+        let count = bindings::VisualTreeHelper::GetChildrenCount(root).ok()?;
+        for i in 0..count {
+            let child = bindings::VisualTreeHelper::GetChild(root, i).ok()?;
+            if let Some(found) = Self::find_text_box_descendant(&child) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    fn invoke_text_edit_on_text_box(text_box: &bindings::TextBox, command: TextEditCommand) {
+        let Ok(itb) = text_box.cast::<bindings::ITextBox>() else {
+            return;
+        };
+        match command {
+            TextEditCommand::Undo => {
+                let _ = itb.Undo();
+            }
+            TextEditCommand::Redo => {
+                let _ = itb.Redo();
+            }
+            TextEditCommand::Cut => {
+                let _ = itb.CutSelectionToClipboard();
+            }
+            TextEditCommand::Copy => {
+                let _ = itb.CopySelectionToClipboard();
+            }
+            TextEditCommand::Paste => {
+                let _ = itb.PasteFromClipboard();
+            }
+            TextEditCommand::SelectAll => {
+                let _ = itb.SelectAll();
+            }
+        }
+    }
+
+    /// Build a `MenuFlyout` from a [`ContextFlyout`] definition, wiring native
+    /// edit commands to the host control (via `id`) and extra items to
+    /// `flyout.on_item_clicked`.
+    fn build_context_menu_flyout(
+        id: ControlId,
+        flyout: &ContextFlyout,
+    ) -> Option<(bindings::MenuFlyout, Vec<windows_core::EventRevoker>)> {
+        let menu_flyout = bindings::MenuFlyout::new().ok()?;
+        let mut edit_wired_indices = FxHashSet::default();
+        let mut item_kinds: Vec<MenuSlot> = Vec::new();
+        let mut revokers = Vec::new();
+        if let Ok(flyout_items) = menu_flyout.Items() {
+            for def in &flyout.items {
+                let flyout_index = flyout_items.Size().unwrap_or(0) as usize;
+                let kind = match def {
+                    MenuItemDef::EditCommand(cmd) => MenuSlot::Edit(*cmd),
+                    MenuItemDef::Separator => MenuSlot::Separator,
+                    _ => MenuSlot::Extra,
+                };
+                if let Ok(fi) = build_menu_flyout_item_base(def) {
+                    let _ = flyout_items.Append(&fi);
+                    item_kinds.push(kind);
+                    if let MenuItemDef::EditCommand(command) = def
+                        && let Ok(item) = fi.cast::<bindings::MenuFlyoutItem>()
+                    {
+                        edit_wired_indices.insert(flyout_index);
+                        let command = *command;
+                        if let Ok(rev) = item.Click(move |_sender, _args| {
+                            invoke_text_edit_command(id, command);
+                        }) {
+                            revokers.push(rev);
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(handler) = &flyout.on_item_clicked
+            && let Ok(items) = menu_flyout.Items()
+        {
+            Self::wire_context_flyout_clicks(&items, &edit_wired_indices, handler, &mut revokers);
+        }
+        // Refresh dynamic edit-command visibility each time the flyout opens.
+        // WinUI's native `TextCommandBarFlyout` adds/removes Undo/Redo/Cut/
+        // Copy/Paste/Select All based on undo history, selection, and clipboard
+        // state. Our merged `MenuFlyout` is static, so without this handler the
+        // edit commands would always be present and enabled (showing irrelevant
+        // items). The `Opening` event fires before display; we collapse
+        // inapplicable edit items and orphan separators to match native.
+        if item_kinds.iter().any(|k| matches!(k, MenuSlot::Edit(_)))
+            && let Ok(ifb) = menu_flyout.cast::<bindings::IFlyoutBase>()
+        {
+            let kinds_for_opening = item_kinds.clone();
+            if let Ok(rev) = ifb.Opening(move |sender, _args| {
+                refresh_text_edit_menu_visibility(id, sender, &kinds_for_opening);
+            }) {
+                revokers.push(rev);
+            }
+        }
+        Some((menu_flyout, revokers))
+    }
+
+    /// Refresh the dynamic edit-command items of a text context flyout against
+    /// the host control's current edit state. Called from the flyout `Opening`
+    /// handler so the merged menu matches WinUI's native add/remove behavior
+    /// instead of always showing every edit command.
+    pub(crate) fn refresh_text_edit_menu_visibility(
+        &self,
+        id: ControlId,
+        sender: &windows_core::Ref<windows_core::IInspectable>,
+        kinds: &[MenuSlot],
+    ) {
+        if kinds.is_empty() {
+            return;
+        }
+        // Snapshot the host edit control's state.
+        let state = {
+            let map = self.controls.borrow();
+            let Some(handle) = map.get(&id) else {
+                return;
+            };
+            match handle {
+                Handle::TextBox(tb) => {
+                    let Ok(itb) = tb.cast::<bindings::ITextBox>() else {
+                        return;
+                    };
+                    EditState::TextBox {
+                        can_undo: itb.CanUndo().unwrap_or(false),
+                        can_redo: itb.CanRedo().unwrap_or(false),
+                        can_paste: itb.CanPasteClipboardContent().unwrap_or(false),
+                        selection_length: itb.SelectionLength().unwrap_or(0),
+                        is_read_only: itb.IsReadOnly().unwrap_or(false),
+                        text_length: itb.Text().map_or(0, |t| t.encode_utf16().count() as i32),
+                    }
+                }
+                Handle::PasswordBox(pb) => {
+                    let Ok(ipb) = pb.cast::<bindings::IPasswordBox>() else {
+                        return;
+                    };
+                    EditState::Password {
+                        can_paste: ipb.CanPasteClipboardContent().unwrap_or(false),
+                        text_length: ipb
+                            .Password()
+                            .map_or(0, |t| t.encode_utf16().count() as i32),
+                    }
+                }
+                // Non-text control (e.g. AutoSuggestBox handled separately, or
+                // a non-text widget with no edit commands): nothing to refresh.
+                _ => return,
+            }
+        };
+
+        // The Opening sender is the MenuFlyout itself.
+        let Some(sender) = sender.as_ref() else {
+            return;
+        };
+        let Ok(imf) = sender.cast::<bindings::IMenuFlyout>() else {
+            return;
+        };
+        let Ok(items) = imf.Items() else {
+            return;
+        };
+        let size = items.Size().unwrap_or(0) as usize;
+        if size != kinds.len() {
+            return;
+        }
+
+        // First pass: set Visibility on edit + extra items; collect visible
+        // flags (separators are refined in the second pass).
+        let mut visible_flags: Vec<bool> = vec![false; kinds.len()];
+        for i in 0..size {
+            let Ok(item) = items.GetAt(i as u32) else {
+                continue;
+            };
+            let visible = match kinds[i] {
+                MenuSlot::Edit(cmd) => state.command_visible(cmd),
+                MenuSlot::Extra | MenuSlot::Separator => true,
+            };
+            visible_flags[i] = visible;
+            if matches!(kinds[i], MenuSlot::Edit(_) | MenuSlot::Extra)
+                && let Ok(iue) = item.cast::<bindings::IUIElement>()
+            {
+                let _ = iue.SetVisibility(if visible {
+                    bindings::Visibility::Visible
+                } else {
+                    bindings::Visibility::Collapsed
+                });
+            }
+        }
+
+        // Second pass: collapse orphan separators. A separator is kept only when
+        // a visible non-separator item exists on both sides; this also collapses
+        // leading/trailing separators and runs of consecutive separators when
+        // their adjacent edit group is entirely collapsed.
+        let mut has_visible_after: Vec<bool> = vec![false; kinds.len()];
+        let mut seen_after = false;
+        for i in (0..kinds.len()).rev() {
+            has_visible_after[i] = seen_after;
+            if !matches!(kinds[i], MenuSlot::Separator)
+                && visible_flags.get(i).copied().unwrap_or(false)
+            {
+                seen_after = true;
+            }
+        }
+        let mut has_visible_before = false;
+        for i in 0..kinds.len() {
+            if matches!(kinds[i], MenuSlot::Separator) {
+                let orphan = !has_visible_before || !has_visible_after[i];
+                visible_flags[i] = !orphan;
+                if let Ok(item) = items.GetAt(i as u32)
+                    && let Ok(iue) = item.cast::<bindings::IUIElement>()
+                {
+                    let _ = iue.SetVisibility(if orphan {
+                        bindings::Visibility::Collapsed
+                    } else {
+                        bindings::Visibility::Visible
+                    });
+                }
+            } else if !matches!(kinds[i], MenuSlot::Separator)
+                && visible_flags.get(i).copied().unwrap_or(false)
+            {
+                has_visible_before = true;
+            }
+        }
+    }
+
+    /// Show a context flyout manually built for an `AutoSuggestBox`, in
+    /// response to `ContextRequested`. A `put_ContextFlyout` on the box
+    /// itself is never shown because its templated inner `TextBox` owns
+    /// native context-menu handling, so this shows the merged menu by hand at
+    /// the pointer position instead.
+    fn show_auto_suggest_context_menu(
+        menu_flyout: &bindings::MenuFlyout,
+        sender: windows_core::Ref<bindings::UIElement>,
+        args: windows_core::Ref<bindings::ContextRequestedEventArgs>,
+    ) {
+        let Some(args) = args.as_ref() else {
+            return;
+        };
+        let Ok(ica) = args.cast::<bindings::IContextRequestedEventArgs>() else {
+            return;
+        };
+        // Suppress the inner TextBox's own TextCommandBarFlyout.
+        let _ = ica.SetHandled(true);
+        let Some(sender) = sender.as_ref() else {
+            return;
+        };
+        let Ok(target) = sender.cast::<bindings::UIElement>() else {
+            return;
+        };
+        let Ok(ifb) = menu_flyout.cast::<bindings::IFlyoutBase>() else {
+            return;
+        };
+
+        // Pin the flyout to the same `XamlRoot` as the target. A manually-shown
+        // flyout (via `ShowAt`/`ShowAtWithOptions` from `ContextRequested`) does
+        // not inherit the target's `XamlRoot` the way a `put_ContextFlyout`-
+        // bound flyout does; without it the host dismisses the flyout
+        // immediately (visible as a vanishing "thin sliver").
+        if let Ok(iue_sender) = sender.cast::<bindings::IUIElement>()
+            && let Ok(root) = iue_sender.XamlRoot()
+        {
+            let _ = ifb.SetXamlRoot(&root);
+        }
+
+        // Resolve the pointer position relative to the target (absent for
+        // keyboard-driven context activation).
+        let mut point = bindings::Point { x: 0.0, y: 0.0 };
+        let have_pos = ica.TryGetPosition(&target, &mut point).unwrap_or(false);
+
+        // microsoft-ui-xaml#7838: `MenuFlyout.ShowAt(UIElement, Point)` and a
+        // bare `FlyoutBase.ShowAt(FrameworkElement)` both open the flyout in
+        // the default `Auto` show mode, which is immediately light-dismissed
+        // when shown from a `ContextRequested` handler (the "thin sliver"
+        // symptom). The reliable workaround is
+        // `FlyoutBase.ShowAt(DependencyObject, FlyoutShowOptions)` with
+        // `FlyoutShowOptions.ShowMode = Standard` (and the pointer `Position`
+        // when available).
+        if let Ok(opts) = bindings::FlyoutShowOptions::new() {
+            let _ = opts.SetShowMode(bindings::FlyoutShowMode::Standard);
+            if have_pos {
+                let _ = opts.SetPosition(Some(point));
+            }
+            if let Ok(dobj) = target.cast::<bindings::DependencyObject>()
+                && ifb.ShowAtWithOptions(&dobj, &opts).is_ok()
+            {
+                return;
+            }
+        }
+
+        // Fallbacks (auto-dismiss-prone): the `ShowMode` property on the
+        // flyout itself is not consistently honored by the no-options `ShowAt`
+        // overloads, so these are last resort when options activation fails.
+        let _ = ifb.SetShowMode(bindings::FlyoutShowMode::Standard);
+        if have_pos
+            && let Ok(imf) = menu_flyout.cast::<bindings::IMenuFlyout>()
+            && imf.ShowAt(&target, point).is_ok()
+        {
+            return;
+        }
+        if let Ok(fe) = sender.cast::<bindings::FrameworkElement>() {
+            let _ = ifb.ShowAt(&fe);
+        }
+    }
+
+    fn register_auto_suggest_context_menu(
+        &self,
+        id: ControlId,
+        asb: &bindings::AutoSuggestBox,
+        menu_flyout: bindings::MenuFlyout,
+    ) {
+        let Ok(iue) = asb.cast::<bindings::IUIElement>() else {
+            return;
+        };
+        self.auto_suggest_context_menus
+            .borrow_mut()
+            .insert(id, menu_flyout.clone());
+        let menu_for_requested = menu_flyout;
+        if let Ok(rev) = iue.ContextRequested(move |sender, args| {
+            Self::show_auto_suggest_context_menu(&menu_for_requested, sender, args);
+        }) {
+            self.auto_suggest_context_requested_revokers
+                .borrow_mut()
+                .insert(id, rev);
+        }
+        // NOTE: we intentionally do NOT register a `ContextCanceled -> Hide()`
+        // handler here. On the AutoSuggestBox, `ContextCanceled` has been
+        // observed to fire immediately after `ContextRequested`, which would
+        // call `Hide()` on the just-shown flyout and snap it shut (the "thin
+        // sliver" symptom). Standard-mode flyouts light-dismiss on their own
+        // when the user clicks elsewhere, so the explicit `Hide()` is not
+        // needed for mouse-driven context menus. If touch-hold cancel support
+        // becomes required later, gate the `Hide()` on a real cancel (not the
+        // post-`ContextRequested` tick).
+    }
+
+    fn clear_auto_suggest_context_menu(&self, id: ControlId) {
+        self.auto_suggest_context_requested_revokers
+            .borrow_mut()
+            .remove(&id);
+        self.auto_suggest_context_menus.borrow_mut().remove(&id);
+    }
+
+    fn attach_context_flyout_to_element(
+        iue: &bindings::IUIElement,
+        menu_flyout: &bindings::MenuFlyout,
+    ) {
+        let _ = iue.SetContextFlyout(menu_flyout);
+    }
+
+    fn invoke_text_edit_on_handle(handle: &Handle, command: TextEditCommand) {
+        let _ = handle.as_ui_element().Focus(FocusState::Programmatic);
+        match handle {
+            Handle::TextBox(tb) => Self::invoke_text_edit_on_text_box(tb, command),
+            Handle::PasswordBox(pb) => {
+                let Ok(ipb) = pb.cast::<bindings::IPasswordBox>() else {
+                    return;
+                };
+                match command {
+                    TextEditCommand::Paste => {
+                        let _ = ipb.PasteFromClipboard();
+                    }
+                    TextEditCommand::SelectAll => {
+                        let _ = ipb.SelectAll();
+                    }
+                    _ => {}
+                }
+            }
+            Handle::AutoSuggestBox(asb) => {
+                let Ok(root) = asb.cast::<bindings::DependencyObject>() else {
+                    return;
+                };
+                if let Some(tb) = Self::find_text_box_descendant(&root) {
+                    Self::invoke_text_edit_on_text_box(&tb, command);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Invokes a built-in text edit command on the control registered at `id`.
+    pub(crate) fn invoke_text_edit_command(&self, id: ControlId, command: TextEditCommand) {
+        let map = self.controls.borrow();
+        let Some(handle) = map.get(&id) else {
+            return;
+        };
+        Self::invoke_text_edit_on_handle(handle, command);
+    }
+}
 
 impl Backend for WinUIBackend {
     fn create(&mut self, kind: ControlKind) -> ControlId {
@@ -2309,6 +2803,7 @@ impl Backend for WinUIBackend {
             diag::dropped(handle.as_ui_element().ReleasePointerCaptures());
         }
         self.drag_revokers.borrow_mut().remove(&id);
+        self.clear_auto_suggest_context_menu(id);
         self.controls.borrow_mut().remove(&id);
         self.event_revokers
             .borrow_mut()
@@ -3331,6 +3826,49 @@ impl Backend for WinUIBackend {
         }
 
         self.drag_revokers.borrow_mut().insert(id, tokens);
+    }
+
+    fn set_context_flyout(&mut self, id: ControlId, flyout: Option<&ContextFlyout>) {
+        self.event_revokers
+            .borrow_mut()
+            .remove(&(id, Event::ContextMenuItemClicked));
+        self.clear_auto_suggest_context_menu(id);
+
+        let map = self.controls.borrow();
+        let Some(handle) = map.get(&id) else {
+            return;
+        };
+        let ui = handle.as_ui_element();
+        let Ok(iue) = ui.cast::<bindings::IUIElement>() else {
+            return;
+        };
+
+        let Some(flyout) = flyout else {
+            let _ = iue.SetContextFlyout(None::<&bindings::FlyoutBase>);
+            return;
+        };
+
+        let Some((menu_flyout, revokers)) = Self::build_context_menu_flyout(id, flyout) else {
+            return;
+        };
+
+        let auto_suggest = match handle {
+            Handle::AutoSuggestBox(asb) => Some(asb.clone()),
+            _ => None,
+        };
+        drop(map);
+
+        if let Some(asb) = auto_suggest {
+            self.register_auto_suggest_context_menu(id, &asb, menu_flyout);
+        } else {
+            Self::attach_context_flyout_to_element(&iue, &menu_flyout);
+        }
+
+        if !revokers.is_empty() {
+            self.event_revokers
+                .borrow_mut()
+                .insert((id, Event::ContextMenuItemClicked), revokers);
+        }
     }
 
     fn get_native_element(&self, id: ControlId) -> Option<windows_core::IInspectable> {

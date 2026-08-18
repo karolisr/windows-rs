@@ -68,6 +68,28 @@ pub fn host_dpi_scale() -> Option<f64> {
     with_active_host(|h| h.dpi_scale())
 }
 
+/// Invokes a built-in text edit command on the control registered at `id`.
+pub(crate) fn invoke_text_edit_command(id: ControlId, command: TextEditCommand) {
+    let _ = with_active_host(|h| {
+        h.render_host
+            .with_backend(|backend| backend.invoke_text_edit_command(id, command));
+    });
+}
+
+/// Refreshes the dynamic edit-command items of a text context flyout against
+/// the host control's current edit state, called from the flyout `Opening`
+/// event. Mirrors `invoke_text_edit_command`'s host->backend routing.
+pub(crate) fn refresh_text_edit_menu_visibility(
+    id: ControlId,
+    sender: windows_core::Ref<windows_core::IInspectable>,
+    kinds: &[MenuSlot],
+) {
+    let _ = with_active_host(|h| {
+        h.render_host
+            .with_backend(|backend| backend.refresh_text_edit_menu_visibility(id, &sender, kinds));
+    });
+}
+
 /// Per-window state shared between a [`ReactorHost`], its `post_render` attach
 /// closure, and its backend. Holds the window plus the content root and any
 /// theme / title-bar requests queued before the root element exists.
